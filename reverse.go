@@ -27,86 +27,64 @@ func XXDReverse(r io.Reader, w io.Writer) error {
 		octs = 2
 	}
 
-	if opts.Len != -1 {
-		if opts.Len < int64(cols) {
-			cols = int(opts.Len)
-		}
+	if opts.Len != -1 && opts.Len < int64(cols) {
+		cols = int(opts.Len)
 	}
 
 	if octs < 1 {
 		octs = cols
 	}
 
-	// character count
 	c := int64(0)
 	rd := bufio.NewReader(r)
+
 	for {
-		// TODO this is causing issues with plain
 		line, err := rd.ReadBytes('\n')
-		n := len(line)
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return fmt.Errorf("hexxy: %v", err)
 		}
 
-		if n == 0 {
+		if len(line) == 0 {
 			return nil
 		}
 
-		if dumpType == dumpHex {
-			for i := 0; n >= octs; {
+		n := len(line)
+		i := 0
+
+		for i < n {
+			if i+octs > n {
+				break
+			}
+
+			switch dumpType {
+			case dumpHex, dumpCformat:
 				if rv, _ := hexDecode(char, line[i:i+octs]); rv == 0 {
 					w.Write(char)
-					i += 2
-					n -= 2
+					i += octs
 					c++
 				} else if rv == -1 {
 					i++
-					n--
 				} else {
-					// rv == -2
 					i += 2
-					n -= 2
 				}
-			}
-		} else if dumpType == dumpBinary {
-			for i := 0; n >= octs; {
-				if binaryDecode(char, line[i:i+octs]) != -1 {
+			case dumpBinary:
+				if binaryDecode(char, line[i:i+octs]) == -1 {
 					i++
-					n--
-					continue
 				} else {
 					w.Write(char)
-					i += 8
-					n -= 8
+					i += octs
 					c++
 				}
-			}
-		} else if dumpType == dumpPlain {
-			for i := 0; n >= octs; i++ {
+			case dumpPlain:
 				if rv, _ := hexDecode(char, line[i:i+octs]); rv != 0 {
 					w.Write(char)
 					c++
 				}
-				n--
-			}
-		} else if dumpType == dumpCformat {
-			for i := 0; n >= octs; {
-				if rv, _ := hexDecode(char, line[i:i+octs]); rv == 0 {
-					w.Write(char)
-					i += 4
-					n -= 4
-					c++
-				} else if rv == -1 {
-					i++
-					n--
-				} else { // rv == -2
-					i += 2
-					n -= 2
-				}
+				i++
 			}
 		}
 
-		if c == int64(cols) && cols > 0 {
+		if c >= int64(cols) && cols > 0 {
 			return nil
 		}
 	}
